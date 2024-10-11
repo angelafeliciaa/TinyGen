@@ -8,3 +8,6 @@ aiofiles
 supabase
 networkx
 pyvis
+boto3
+azure-search-documents
+tiktoken
