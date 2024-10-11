@@ -5,7 +5,7 @@ import uvicorn
 import os
 from dotenv import load_dotenv
 from .models.codegen import CodegenRequest
-from .services import github_service, llm_service, diff_service
+from .services import github_service, llm_service, diff_service, visualization
 from app.services import supabase_service
 
 load_dotenv()
@@ -15,6 +15,10 @@ app = FastAPI()
 # Serve static files
 static_dir = os.path.join(os.getcwd(), "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# Serve output files
+output_dir = os.path.join(os.getcwd(), "outputs")
+app.mount("/outputs", StaticFiles(directory=output_dir), name="outputs")
 
 @app.get("/")
 async def read_index():
@@ -48,10 +52,13 @@ async def generate_code(request: CodegenRequest):
         # Sanitize diff by removing null bytes
         sanitized_diff = diff.replace('\u0000', '')
         
+        # Generate import visualization graph
+        graph_path = visualization.visualize_import_graph(repo_content, os.path.join(output_dir, "import_graph.html"))
+        
         # Store in Supabase
         supabase_service.log_generation(request.repoUrl, request.prompt, sanitized_diff)
         
-        return JSONResponse(content={"diff": sanitized_diff})
+        return JSONResponse(content={"diff": sanitized_diff, "graph_url": f"/outputs/import_graph.html"})
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 

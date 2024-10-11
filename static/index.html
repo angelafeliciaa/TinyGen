@@ -46,10 +46,17 @@
             color: #24292e;
             font-weight: bold;
         }
+        #graphContainer {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ccc;
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
     <h1>TinyGen</h1>
+    <p>An AI-powered issue-to-resolution accelerator powered by GPT-4</p>
     <form id="tinygenForm">
         <input type="text" id="repoUrl" placeholder="GitHub Repo URL" required>
         <textarea id="prompt" placeholder="Enter your prompt" required></textarea>
@@ -57,6 +64,8 @@
     </form>
     <h2>Result:</h2>
     <pre id="result"></pre>
+    <h2>Import Visualization Graph:</h2>
+    <iframe id="graphContainer" frameborder="0"></iframe>
 
     <script>
         function highlightDiff(diff) {
@@ -78,9 +87,11 @@
             const repoUrl = document.getElementById('repoUrl').value;
             const prompt = document.getElementById('prompt').value;
             const resultElement = document.getElementById('result');
+            const graphContainer = document.getElementById('graphContainer');
 
             resultElement.textContent = 'Generating diff...';
             resultElement.className = '';
+            graphContainer.src = '';
 
             try {
                 const response = await fetch('/generate', {
@@ -94,17 +105,23 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || 'Unknown error occurred');
+                    throw new Error(data.error || `HTTP error! status: ${response.status}`);
                 }
+
+                console.log('Response data:', data);  
 
                 if (data.diff) {
                     resultElement.innerHTML = highlightDiff(data.diff);
+                    if (data.graph_url) {
+                        graphContainer.src = data.graph_url;
+                    }
                 } else if (data.error) {
                     throw new Error(data.error);
                 } else {
-                    throw new Error('Unexpected response format');
+                    throw new Error(`Unexpected response format: ${JSON.stringify(data)}`);
                 }
             } catch (error) {
+                console.error('Error details:', error);  
                 resultElement.textContent = `Error: ${error.message}`;
                 resultElement.className = 'error';
             }

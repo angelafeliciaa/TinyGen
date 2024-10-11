@@ -6,3 +6,5 @@ openai>=1.0.0
 GitPython
 aiofiles
 supabase
+networkx
+pyvis
