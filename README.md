@@ -55,5 +55,10 @@ Enter a natural language description of the changes you want to make to your cod
 - FastAPI
 - OpenAI API
 - Supabase
+- AWS S3
+
+## Next Steps
+- Integrate Azure Vector Search to improve the relevance and accuracy of generated diffs
+- Implement the OpenAI Batch API to improve response times 
 
 ---
