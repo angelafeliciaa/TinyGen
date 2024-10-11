@@ -7,3 +7,5 @@ GitPython
 aiofiles
 supabase
 boto3
+networkx
+pyvis
