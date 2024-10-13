@@ -89,15 +89,15 @@ async def generate_code(request: CodegenRequest):
         sanitized_diff = diff.replace('\u0000', '')
 
          # Generate import visualization graph
-        graph_local_path = os.path.join(os.getcwd(), "import_graph.html") 
-        graph_path = visualization.visualize_import_graph(repo_content, graph_local_path)
+        # graph_local_path = os.path.join(os.getcwd(), "import_graph.html") 
+        # graph_path = visualization.visualize_import_graph(repo_content, graph_local_path)
         
-        # Upload the graph to S3
-        s3_key = f"import_graphs/{request.repoUrl.replace('/', '_')}_import_graph.html"
-        graph_url = upload_file_to_s3(graph_local_path, s3_key)
+        # # Upload the graph to S3
+        # s3_key = f"import_graphs/{request.repoUrl.replace('/', '_')}_import_graph.html"
+        # graph_url = upload_file_to_s3(graph_local_path, s3_key)
       
         # Generate import visualization graph
-        # graph_path = visualization.visualize_import_graph(repo_content, os.path.join(output_dir, "import_graph.html"))
+        graph_path = visualization.visualize_import_graph(repo_content, os.path.join(output_dir, "import_graph.html"))
     
         # Store prompt and response in Supabase
         supabase_service.log_generation(request.repoUrl, request.prompt, sanitized_diff)
