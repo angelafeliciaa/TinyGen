@@ -6,6 +6,7 @@ openai>=1.0.0
 GitPython
 aiofiles
 supabase
+boto3
 networkx
 pyvis
 boto3
