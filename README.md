@@ -5,6 +5,9 @@ TinyGen, a toy version of Codegen, is an AI-powered code evolution catalyst - tr
 ## Live Demo
 
 A live demo of TinyGen is available at [https://tinygen-31646a1cc468.herokuapp.com](https://tinygen-31646a1cc468.herokuapp.com). Navigate to https://tinygen-31646a1cc468.herokuapp.com/docs to see the API documentation.
+<div align="center">
+<img width="432" alt="Screenshot 2024-11-03 at 17 42 30" src="https://github.com/user-attachments/assets/8701412d-f6a3-4a74-8d4f-3e2cc80feaad">
+</div>
 
 ## Local Setup
 
