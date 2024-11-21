@@ -9,3 +9,6 @@ supabase
 boto3
 networkx
 pyvis
+boto3
+azure-search-documents
+tiktoken

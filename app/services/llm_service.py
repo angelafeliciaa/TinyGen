@@ -3,6 +3,10 @@ from dotenv import load_dotenv
 import os
 import logging
 import re
+from azure.core.credentials import AzureKeyCredential
+from azure.search.documents import SearchClient
+from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.indexes.models import *
 
 load_dotenv()
 
@@ -12,10 +16,47 @@ logger = logging.getLogger(__name__)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Azure Cognitive Search Credentials
+search_service_endpoint = os.getenv("SEARCH_SERVICE_ENDPOINT")
+search_service_api_key = os.getenv("SEARCH_SERVICE_API_KEY")
+index_name = os.getenv("SEARCH_INDEX_NAME")
+
+credential = AzureKeyCredential(search_service_api_key)
+
+# Initialize the SearchClient
+search_client = SearchClient(
+    endpoint=search_service_endpoint,
+    index_name=index_name,
+    credential=credential
+)
+
+def generate_embedding(text):
+    response = openai.Embedding.create(
+        input=text,
+        engine='text-embedding-ada-002' 
+    )
+    embedding = response['data'][0]['embedding']
+    return embedding
+
+def index_code_files(repo_content):
+    documents = []
+    for idx, (file_path, content) in enumerate(repo_content.items()):
+        if not should_process_file(file_path):
+            continue
+        embedding = generate_embedding(content)
+        documents.append({
+            "id": str(idx),
+            "file_path": file_path,
+            "content": content,
+            "embedding": embedding
+        })
+    # Upload documents to Azure AI Search
+    results = search_client.upload_documents(documents=documents)
+    print(f"Indexed {len(results)} documents.")
+
 
 # could give examples of prompt and response, but that won't work for all cases, 
 # although it would give very accurate results for the specific sample output we're given.
-
 
 def should_process_file(file_path):
     # List of directories and file extensions to ignore
@@ -38,74 +79,37 @@ def should_process_file(file_path):
     return True
 
 def find_relevant_files(repo_content: dict, prompt: str) -> dict:
-    relevant_files = {}
-    for file_path, content in repo_content.items():
-        if not should_process_file(file_path):
-            logger.info(f"Skipping file: {file_path}")
-            continue
 
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are an assistant that determines how relevant a file is to a given prompt. Respond with a numeric relevance score from 1 to 100, where 100 is extremely relevant and 1 is not relevant at all. Only provide the numeric score as your response."},
-                {"role": "user", "content": f"Given the following code:\n\n{content}\n\nHow relevant is this file to the following change request: {prompt}\n\nRelevance score (1-100):"}
-            ],
-            max_tokens=5000,
-            temperature=0
-        )
-        try:
-            score_str = response.choices[0].message.content.strip()
-            score = int(score_str)
-            relevant_files[file_path] = {"content": content, "score": score}
-        except ValueError:
-            logger.warning(f"Error parsing score for {file_path}. Setting default score of 1.")
-            relevant_files[file_path] = {"content": content, "score": 1}
+    # Generate embedding for the prompt
+    prompt_embedding = generate_embedding(prompt)
+
+    # Perform vector search
+    results = search_client.search(
+        search_text="",  # Empty string because we're using vector search
+        vectors=[
+            {
+                "value": prompt_embedding,
+                "fields": "embedding",
+                "k": 10  # Number of top results to return
+            }
+        ],
+        select=["file_path", "content"],
+        top=10  # Ensure this matches 'k' in the vector
+    )
+
+    relevant_files = {}
+
+    for result in results:
+        file_path = result['file_path']
+        content = result['content']
+        score = result['@search.score']  # You can use this if needed
+        relevant_files[file_path] = {
+            'content': content,
+            'score': score
+        }
 
     return relevant_files
 
-def rank_and_select_files(relevant_files: dict) -> dict:
-    # Sort files by score
-    ranked_files = sorted(relevant_files.items(), key=lambda x: x[1]["score"], reverse=True)
-
-    # Determine top_n dynamically
-    total_files = len(ranked_files)
-    cumulative_score = 0
-    score_threshold = 0.8 * sum(file["score"] for _, file in ranked_files)
-
-    for i, (file_path, file_info) in enumerate(ranked_files):
-        cumulative_score += file_info["score"]
-        if cumulative_score >= score_threshold or i >= min(5, total_files // 2):
-            top_n = i + 1
-            break
-    else:
-        top_n = total_files
-
-    logger.info(f"Selected {top_n} out of {total_files} files for detailed analysis.")
-
-    # Select top N files
-    top_files = dict(ranked_files[:top_n])
-
-    return top_files
-
-# decided not to use this because it will have less context
-def extract_relevant_functions(top_files: dict, prompt: str) -> dict:
-    relevant_functions = {}
-    for file_path, file_info in top_files.items():
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are an assistant that extracts relevant functions from a given code file. Respond with the names of the most relevant functions, separated by commas."},
-                {"role": "user", "content": f"Given the following code:\n\n{file_info['content']}\n\nWhat are the most relevant functions for this change request: {prompt}\n\nRelevant functions:"}
-            ],
-            max_tokens=5000,
-            temperature=0
-        )
-        relevant_functions[file_path] = {
-            "score": file_info["score"],
-            "functions": [func.strip() for func in response.choices[0].message.content.split(",")]
-        }
-
-    return relevant_functions
 
 def is_special_file(file_path: str) -> bool:
     """Check if the file requires special handling."""
@@ -152,12 +156,12 @@ def generate_changes(top_files: dict, prompt: str) -> dict:
             )
         
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": f"Given the following code in {file_path}:\n\n{file_info['content']}\n\nApply the following change if necessary: {prompt}\n\nProvide the entire updated code for the file:"}
             ],
-            max_tokens=5000,
+            max_tokens=2048,
             temperature=0
         )
         
@@ -195,12 +199,12 @@ def perform_reflection(changes: dict, prompt: str, max_iterations: int = 3) -> d
                 )
             
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": f"Problem to solve:\n\n{prompt}\n\nReview these changes in {file_path}:\n\n{content}\n\nReturn the code as-is if appropriate, or provide corrected code if needed."}
                 ],
-                max_tokens=5000,
+                max_tokens=2048,
                 temperature=0
             )
             reflection = response.choices[0].message.content.strip()
